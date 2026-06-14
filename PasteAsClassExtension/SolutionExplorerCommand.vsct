@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<CommandTable xmlns="http://schemas.microsoft.com/VisualStudio/2005-10-18/CommandTable">
+  <Extern href="stdidcmd.h" />
+  <Extern href="vsshlids.h" />
+
+  <Commands package="guidMyExtensionPackage">
+    <Groups>
+      <!-- Define a group for your menu item -->
+      <Group guid="guidMyCommandSet" id="MySolutionExplorerGroup" priority="0x0600" />
+    </Groups>
+
+    <Buttons>
+      <!-- Define your button inside that group -->
+      <Button guid="guidMyCommandSet" id="MyCommandId" priority="0x0100" type="Button">
+        <Parent guid="guidMyCommandSet" id="MySolutionExplorerGroup" />
+        <CommandFlag>DynamicVisibility</CommandFlag>
+        <CommandFlag>TextChanges</CommandFlag>
+        <CommandFlag>TextChangesButton</CommandFlag>
+        <CommandFlag>DefaultDisabled</CommandFlag>
+        <Strings>
+          <ButtonText>Paste as Class</ButtonText>
+        </Strings>
+      </Button>
+    </Buttons>
+  </Commands>
+
+  <CommandPlacements>
+    <!-- 1. Right-click on the Solution node -->
+    <!-- Paste class does not use the solution node. Option removed
+      <CommandPlacement guid="guidMyCommandSet" id="MySolutionExplorerGroup" priority="0x0100">
+        <Parent guid="guidSHLMainMenu" id="IDM_VS_CTXT_SOLNNODE"/>
+      </CommandPlacement>
+    -->
+
+    <!-- 2. Right-click on a Project node -->
+    <CommandPlacement guid="guidMyCommandSet" id="MySolutionExplorerGroup" priority="0x0100">
+      <Parent guid="guidSHLMainMenu" id="IDM_VS_CTXT_PROJNODE"/>
+    </CommandPlacement>
+
+    <!-- 3. Right-click on a Folder node -->
+    <CommandPlacement guid="guidMyCommandSet" id="MySolutionExplorerGroup" priority="0x0100">
+      <Parent guid="guidSHLMainMenu" id="IDM_VS_CTXT_FOLDERNODE"/>
+    </CommandPlacement>
+  </CommandPlacements>
+
+  <Symbols>
+    <GuidSymbol name="guidMyExtensionPackage" value="{47781015-81c2-49ef-bb6c-39895f4a5f87}" />
+    <GuidSymbol name="guidMyCommandSet" value="{968c03c3-e904-4f98-8cac-7262c34a305a}">
+      <IDSymbol name="MySolutionExplorerGroup" value="0x0600" />
+      <IDSymbol name="MyCommandId" value="0x0100" />
+    </GuidSymbol>
+  </Symbols>
+</CommandTable>

@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="PasteAsClassExtension/PasteAsClassExtension.csproj">
+    <Deploy />
+  </Project>
+</Solution>

@@ -14,26 +14,33 @@ namespace PasteAsClassExtension.Commands;
 /// <summary>
 /// Handles the right-click menu command and gets the file path of the selected node.
 /// </summary>
-internal sealed class SolutionExplorerCommand {
+internal sealed class PasteAsClassCommand {
+    private const int VK_CONTROL = 0x11;
     private const string FolderNameProperty = "MRBR_FOLDER_NAME";
     private const string ProjectItemProperty = "MRBR_PROJECT_ITEM";
     private const string ProjectProperty = "MRBR_PROJECT";
     public static readonly Guid CommandSet = new("968c03c3-e904-4f98-8cac-7262c34a305a");
     public const int GroupId = 0x0600;
-    public const int CommandId = 0x0100;
+    public const int PasteAsClassCommandId = 0x0100;
+    public const int PasteAsNamespaceClassCommandId = 0x0101;
 
     private readonly AsyncPackage package;
     private readonly DTE2 dte;
 
-    private SolutionExplorerCommand(AsyncPackage package, OleMenuCommandService commandService, DTE2 dte) {
+    private PasteAsClassCommand(AsyncPackage package, OleMenuCommandService commandService, DTE2 dte) {
         this.package = package ?? throw new ArgumentNullException(nameof(package));
         this.dte = dte ?? throw new ArgumentNullException(nameof(dte));
 
         if (commandService != null) {
-            var menuCommandID = new CommandID(CommandSet, CommandId);
-            var menuItem = new OleMenuCommand(this.Execute, menuCommandID);
+            var menuPasteCommandID = new CommandID(CommandSet, PasteAsClassCommandId);
+            var menuItem = new OleMenuCommand(this.Execute, menuPasteCommandID);
+            var menuNamespaceClassCommandID = new CommandID(CommandSet, PasteAsNamespaceClassCommandId);
+            var menuNamespaceClassItem = new OleMenuCommand(this.Execute, menuNamespaceClassCommandID);
             menuItem.BeforeQueryStatus += OnBeforeQueryStatus;
+            menuNamespaceClassItem.BeforeQueryStatus += OnBeforeQueryStatus;
+
             commandService.AddCommand(menuItem);
+            commandService.AddCommand(menuNamespaceClassItem);
         }
     }
 
@@ -58,7 +65,12 @@ internal sealed class SolutionExplorerCommand {
                 }
             }
             command.Enabled = isFolderSelected && hasClipboardText;
-            command.Text = hasClipboardText ? "Paste as Class" : "Paste as Class (Clipboard Empty)";
+            if (command.CommandID.ID == PasteAsClassCommandId) {
+                command.Text = hasClipboardText ? "Paste as Class" : "Paste as Class (Clipboard Empty)";
+            }
+            else if (command.CommandID.ID == PasteAsNamespaceClassCommandId) {
+                command.Text = hasClipboardText ? "Paste as Namespace Class" : "Paste as Namespace Class (Clipboard Empty)";
+            }
             command.Visible = true;
         }
     }
@@ -77,7 +89,7 @@ internal sealed class SolutionExplorerCommand {
 
         var commandService = await package.GetServiceAsync(typeof(IMenuCommandService)) as OleMenuCommandService;
         var dte = await package.GetServiceAsync(typeof(DTE)) as DTE2;
-        new SolutionExplorerCommand(package, commandService!, dte!);
+        new PasteAsClassCommand(package, commandService!, dte!);
     }
 
     /// <summary>
@@ -130,6 +142,36 @@ internal sealed class SolutionExplorerCommand {
             }
             var dteEnvProject = (sentItem?.Properties[ProjectProperty] as EnvDTE.Project)!;
             var projectItem = (sentItem?.Properties[ProjectItemProperty] as ProjectItem)!;
+
+            if (sentItem?.CommandID.ID == PasteAsNamespaceClassCommandId) {
+                var newNamespace = "My.Test.Namespace";
+                var namespaceMatch = NamespaceRegex.Match(clipboardText);
+                if (namespaceMatch.Success) {
+                    if (namespaceMatch.Groups["namespaceFile"].Success) {
+                        var namespaceName = namespaceMatch.Groups["namespaceFileName"].Value.Trim();
+                        clipboardText = clipboardText.Replace(namespaceMatch.Groups["namespaceFileName"].Value, newNamespace);
+                    }
+                    else if (namespaceMatch.Groups["namespaceBlock"].Success) {
+                        var namespaceName = namespaceMatch.Groups["namespaceBlockName"].Value.Trim();
+                        clipboardText = clipboardText.Replace(namespaceMatch.Groups["namespaceBlockName"].Value, newNamespace);
+                        //clipboardText = $"namespace {namespaceName} {{\n{clipboardText}\n}}";
+                    }
+                }
+                else {
+                    // If there is no namespace use file based namespace.
+                    // Using the usings Regex find all the usings and insert the namespace after the last using.
+                    // If there are no usings, insert the namespace at the top of the file.
+                    var usingsMatch = UsingsRegex.Matches(clipboardText);
+                    if (usingsMatch.Count > 0) {
+                        var lastUsing = usingsMatch[usingsMatch.Count - 1];
+                        clipboardText = clipboardText.Insert(lastUsing.Index + lastUsing.Length, $"\nnamespace {newNamespace};\n");
+                    }
+                    else {
+                        clipboardText = $"namespace {newNamespace};\n{clipboardText}";
+                    }
+                }
+            }
+
             File.WriteAllText(filePath, clipboardText, new UTF8Encoding(false));
             if (dteEnvProject != null && projectItem != null) {
 
@@ -145,7 +187,9 @@ internal sealed class SolutionExplorerCommand {
         }
 
     }
-
+    // Create a regex for Block and file spaced namespace
+    Regex UsingsRegex = new Regex("(?<usings>using [\\s\\S]+?;)", RegexOptions.Multiline);
+    Regex NamespaceRegex = new Regex("((?<namespaceFile>(namespace\\s+(?<namespaceFileName>[\\s\\S]+?));[\\s\\S]*?class))|((?<namespaceBlock>(namespace\\s+(?<namespaceBlockName>[\\s\\S]+?){)[\\s\\S]*?class))", RegexOptions.Multiline);
     private static string? TryExtractClassName(string source) {
         var match = Regex.Match(source, @"\bclass\s+([_@A-Za-z][_A-Za-z0-9]*)\b", RegexOptions.Multiline);
         return match.Success ? match.Groups[1].Value.TrimStart('@') : null;

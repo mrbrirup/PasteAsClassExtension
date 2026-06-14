@@ -137,7 +137,7 @@ internal sealed class PasteAsClassCommand {
             ShowError("Could not determine the folder path.");
             return;
         }
-        var className = TryExtractClassName(clipboardText);
+        var className = TryExtractClassName(clipboardText, out string fileType);
         if (string.IsNullOrWhiteSpace(className)) {
             ShowError("Could not find a C# class name in clipboard text.");
             return;
@@ -246,15 +246,24 @@ internal sealed class PasteAsClassCommand {
     /// <summary>
     /// Regular expression to match namespace declarations in C# code. This regex captures both file-scoped and block-scoped namespaces, allowing for multi-line matches and various whitespace characters. It is used to identify the location of namespace declarations in the clipboard text when adjusting namespaces.
     /// </summary>
-    Regex NamespaceRegex = new Regex("((?<namespaceFile>(namespace\\s+(?<namespaceFileName>[\\s\\S]+?));[\\s\\S]*?class))|((?<namespaceBlock>(namespace\\s+(?<namespaceBlockName>[\\s\\S]+?){)[\\s\\S]*?class))", RegexOptions.Multiline);
+    Regex NamespaceRegex = new Regex("((?<namespaceFile>(namespace\\s+(?<namespaceFileName>[\\s\\S]+?));[\\s\\S]*?(class|interface|enum)))|((?<namespaceBlock>(namespace\\s+(?<namespaceBlockName>[\\s\\S]+?){)[\\s\\S]*?(class|interface|enum)))", RegexOptions.Multiline);
     /// <summary>
     /// Attempts to extract the class name from the provided C# source code using a regular expression. The regex looks for the keyword "class" followed by a valid C# identifier, which is captured and returned. If no class name is found, the method returns null.
     /// </summary>
     /// <param name="source">The C# source code from which to extract the class name.</param>
+    /// <param name="fileType">The type of the file, e.g., "class", "interface", etc.</param>
     /// <returns>The extracted class name, or null if no class name is found.</returns>
-    private static string? TryExtractClassName(string source) {
-        var match = Regex.Match(source, @"\bclass\s+([_@A-Za-z][_A-Za-z0-9]*)\b", RegexOptions.Multiline);
-        return match.Success ? match.Groups[1].Value.TrimStart('@') : null;
+    private static string? TryExtractClassName(string source, out string fileType) {
+        var match = Regex.Match(source, @"\b(?<fileType>class|interface|enum)\s+(?<fileName>[_@A-Za-z][_A-Za-z0-9]*)\b", RegexOptions.Multiline);
+        string retVal = string.Empty;
+        if (match.Success) {
+            fileType = match.Groups["fileType"].Value;
+            retVal = match.Groups["fileName"].Value;
+        }
+        else {
+            fileType = string.Empty;
+        }
+        return match.Success ? retVal.TrimStart('@') : null;
     }
 
     /// <summary>

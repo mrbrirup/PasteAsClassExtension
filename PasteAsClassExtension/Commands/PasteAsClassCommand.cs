@@ -3,6 +3,7 @@ using EnvDTE80;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
 using System;
+using System.Collections.Generic;
 using System.ComponentModel.Design;
 using System.IO;
 using System.Text;
@@ -26,7 +27,13 @@ internal sealed class PasteAsClassCommand {
 
     private readonly AsyncPackage package;
     private readonly DTE2 dte;
-
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PasteAsClassCommand"/> class.
+    /// </summary>
+    /// <param name="package">The package instance.</param>
+    /// <param name="commandService">The command service.</param>
+    /// <param name="dte">The DTE2 instance.</param>
+    /// <exception cref="ArgumentNullException"></exception>
     private PasteAsClassCommand(AsyncPackage package, OleMenuCommandService commandService, DTE2 dte) {
         this.package = package ?? throw new ArgumentNullException(nameof(package));
         this.dte = dte ?? throw new ArgumentNullException(nameof(dte));
@@ -43,7 +50,11 @@ internal sealed class PasteAsClassCommand {
             commandService.AddCommand(menuNamespaceClassItem);
         }
     }
-
+    /// <summary>
+    /// This method is called before the command's status is queried, allowing you to enable or disable the command based on the current context.
+    /// </summary>
+    /// <param name="sender">The command sender.</param>
+    /// <param name="e">The event arguments.</param>
     private void OnBeforeQueryStatus(object sender, EventArgs e) {
         ThreadHelper.ThrowIfNotOnUIThread();
         if (sender is OleMenuCommand command) {
@@ -66,10 +77,10 @@ internal sealed class PasteAsClassCommand {
             }
             command.Enabled = isFolderSelected && hasClipboardText;
             if (command.CommandID.ID == PasteAsClassCommandId) {
-                command.Text = hasClipboardText ? "Paste as Class" : "Paste as Class (Clipboard Empty)";
+                command.Text = "Paste as Class";
             }
             else if (command.CommandID.ID == PasteAsNamespaceClassCommandId) {
-                command.Text = hasClipboardText ? "Paste as Namespace Class" : "Paste as Namespace Class (Clipboard Empty)";
+                command.Text = "Paste as Namespace and Class";
             }
             command.Visible = true;
         }
@@ -81,9 +92,10 @@ internal sealed class PasteAsClassCommand {
     private IServiceProvider ServiceProvider => this.package;
 
     /// <summary>
-    /// Initializes the singleton instance of the command.
-    /// Call this inside your AsyncPackage's InitializeAsync method.
+    /// Initializes the command and adds it to the command service.
     /// </summary>
+    /// <param name="package">The package instance.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
     public static async System.Threading.Tasks.Task InitializeAsync(AsyncPackage package) {
         await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(package.DisposalToken);
 
@@ -93,8 +105,10 @@ internal sealed class PasteAsClassCommand {
     }
 
     /// <summary>
-    /// This method runs automatically whenever the user clicks your menu button.
+    /// Executes the command when it is invoked. This method reads the clipboard text, extracts the class name, and creates a new .cs file in the selected folder with the clipboard content. It also handles namespace adjustments if the "Paste as Namespace and Class" command is used.
     /// </summary>
+    /// <param name="sender">The command sender.</param>
+    /// <param name="e">The event arguments.</param>
     private void Execute(object sender, EventArgs e) {
         ThreadHelper.ThrowIfNotOnUIThread();
         var sentItem = sender as OleMenuCommand;
@@ -144,7 +158,13 @@ internal sealed class PasteAsClassCommand {
             var projectItem = (sentItem?.Properties[ProjectItemProperty] as ProjectItem)!;
 
             if (sentItem?.CommandID.ID == PasteAsNamespaceClassCommandId) {
-                var newNamespace = "My.Test.Namespace";
+                var defaultNamespace = (dteEnvProject.Properties?.Item("DefaultNamespace")?.Value as string) ?? "";
+                string newNamespace = defaultNamespace;
+                if (projectItem is not null) {
+                    // get all the folders from the root of the project to the selected folder and create a namespace from them.
+                    var namespaceFromFolder = GetParentFolderNames(projectItem);
+                    newNamespace = string.Join(".", [defaultNamespace, .. namespaceFromFolder, projectItem.Name]);
+                }
                 var namespaceMatch = NamespaceRegex.Match(clipboardText);
                 if (namespaceMatch.Success) {
                     if (namespaceMatch.Groups["namespaceFile"].Success) {
@@ -153,8 +173,7 @@ internal sealed class PasteAsClassCommand {
                     }
                     else if (namespaceMatch.Groups["namespaceBlock"].Success) {
                         var namespaceName = namespaceMatch.Groups["namespaceBlockName"].Value.Trim();
-                        clipboardText = clipboardText.Replace(namespaceMatch.Groups["namespaceBlockName"].Value, newNamespace);
-                        //clipboardText = $"namespace {namespaceName} {{\n{clipboardText}\n}}";
+                        clipboardText = clipboardText.Replace(namespaceMatch.Groups["namespaceBlockName"].Value, newNamespace + " ");
                     }
                 }
                 else {
@@ -164,10 +183,10 @@ internal sealed class PasteAsClassCommand {
                     var usingsMatch = UsingsRegex.Matches(clipboardText);
                     if (usingsMatch.Count > 0) {
                         var lastUsing = usingsMatch[usingsMatch.Count - 1];
-                        clipboardText = clipboardText.Insert(lastUsing.Index + lastUsing.Length, $"\nnamespace {newNamespace};\n");
+                        clipboardText = clipboardText.Insert(lastUsing.Index + lastUsing.Length, $"\r\nnamespace {newNamespace};\r\n");
                     }
                     else {
-                        clipboardText = $"namespace {newNamespace};\n{clipboardText}";
+                        clipboardText = $"namespace {newNamespace};\r\n{clipboardText}";
                     }
                 }
             }
@@ -187,17 +206,62 @@ internal sealed class PasteAsClassCommand {
         }
 
     }
-    // Create a regex for Block and file spaced namespace
+
+    /// <summary>
+    /// Gets the names of all parent folders for a given ProjectItem, starting from the immediate parent up to the root of the project. This can be useful for constructing namespaces based on folder structure.
+    /// </summary>
+    /// <param name="item">The ProjectItem for which to retrieve parent folder names.</param>
+    /// <returns>A list of parent folder names, ordered from the root to the immediate parent.</returns>
+    public static List<string> GetParentFolderNames(ProjectItem item) {
+        ThreadHelper.ThrowIfNotOnUIThread();
+        List<string> folderNames = new List<string>();
+
+        // Start with the immediate parent collection of the current item
+        object currentParent = item.Collection?.Parent!;
+
+        // Loop upwards until we hit the root Project object
+        while (currentParent is ProjectItem parentItem) {
+            // Check if the parent item is actually a folder
+            if (parentItem.Kind == EnvDTE.Constants.vsProjectItemKindPhysicalFolder ||
+                parentItem.Kind == EnvDTE.Constants.vsProjectItemKindVirtualFolder) {
+                folderNames.Add(parentItem.Name);
+            }
+
+            // Move one level higher in the tree hierarchy
+            currentParent = parentItem.Collection?.Parent!;
+        }
+
+        // Optional: Reverse the list so it reads from Root -> Leaf
+        folderNames.Reverse();
+
+        return folderNames;
+    }
+
+
+
+    /// <summary>
+    /// Regular expression to match using directives in C# code. This regex captures all using statements, allowing for multi-line matches and various whitespace characters. It is used to identify the location of using directives in the clipboard text when adjusting namespaces.
+    /// </summary>
     Regex UsingsRegex = new Regex("(?<usings>using [\\s\\S]+?;)", RegexOptions.Multiline);
+    /// <summary>
+    /// Regular expression to match namespace declarations in C# code. This regex captures both file-scoped and block-scoped namespaces, allowing for multi-line matches and various whitespace characters. It is used to identify the location of namespace declarations in the clipboard text when adjusting namespaces.
+    /// </summary>
     Regex NamespaceRegex = new Regex("((?<namespaceFile>(namespace\\s+(?<namespaceFileName>[\\s\\S]+?));[\\s\\S]*?class))|((?<namespaceBlock>(namespace\\s+(?<namespaceBlockName>[\\s\\S]+?){)[\\s\\S]*?class))", RegexOptions.Multiline);
+    /// <summary>
+    /// Attempts to extract the class name from the provided C# source code using a regular expression. The regex looks for the keyword "class" followed by a valid C# identifier, which is captured and returned. If no class name is found, the method returns null.
+    /// </summary>
+    /// <param name="source">The C# source code from which to extract the class name.</param>
+    /// <returns>The extracted class name, or null if no class name is found.</returns>
     private static string? TryExtractClassName(string source) {
         var match = Regex.Match(source, @"\bclass\s+([_@A-Za-z][_A-Za-z0-9]*)\b", RegexOptions.Multiline);
         return match.Success ? match.Groups[1].Value.TrimStart('@') : null;
     }
 
     /// <summary>
-    /// Searches Visual Studio's active selection to pull out the hard drive path.
+    /// Sets the properties of the selected node in the Solution Explorer, including the folder path, project item, and project. This method is used to determine the context for the "Paste as Class" command, ensuring that the command operates on the correct project and folder. It handles various types of selected items, including projects and project items, and retrieves their full paths.
     /// </summary>
+    /// <param name="sender">The source of the event, typically the command or menu item.</param>
+    /// <returns>True if the properties were successfully set; otherwise, false.</returns>
     private bool SetSelectedNodeProperties(object sender) {
         ThreadHelper.ThrowIfNotOnUIThread();
 
@@ -262,6 +326,10 @@ internal sealed class PasteAsClassCommand {
         }
         return false;
     }
+    /// <summary>
+    /// Displays an error message to the user using Visual Studio's message box. This method is used to inform the user of issues encountered during the execution of the "Paste as Class" command, such as clipboard errors or file creation failures.
+    /// </summary>
+    /// <param name="message">The error message to display.</param>
     private void ShowError(string message) {
         ThreadHelper.ThrowIfNotOnUIThread();
         VsShellUtilities.ShowMessageBox(

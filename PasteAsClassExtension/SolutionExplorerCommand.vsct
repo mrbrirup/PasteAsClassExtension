@@ -27,10 +27,10 @@
         <CommandFlag>DynamicVisibility</CommandFlag>
         <CommandFlag>TextChanges</CommandFlag>
         <CommandFlag>TextChangesButton</CommandFlag>
-        <!--<CommandFlag>DefaultDisabled</CommandFlag>-->
+        <CommandFlag>DefaultDisabled</CommandFlag>
         <CommandFlag>DontCache</CommandFlag>
         <Strings>
-          <ButtonText>Paste as Namespace.Class</ButtonText>
+          <ButtonText>Paste as Namespace and Class</ButtonText>
         </Strings>
       </Button>
     </Buttons>

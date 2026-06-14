@@ -1,19 +1,15 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net472</TargetFramework>
+    <TargetFramework>net48</TargetFramework>
     <Nullable>enable</Nullable>
     <LangVersion>14</LangVersion>
     <UseWindowsForms>true</UseWindowsForms>
 
     <!-- VSIX settings -->
     <VSSDKBuildToolsAutoSetup>true</VSSDKBuildToolsAutoSetup>
+    <VsixDeployOnDebug>true</VsixDeployOnDebug>
     <GeneratePkgDefFile>true</GeneratePkgDefFile>
-
-    <!-- Debug settings for launching experimental instance -->
-    <StartAction>Program</StartAction>
-    <StartProgram>$(DevEnvDir)devenv.exe</StartProgram>
-    <StartArguments>/RootSuffix Exp</StartArguments>
   </PropertyGroup>
 
   <ItemGroup>

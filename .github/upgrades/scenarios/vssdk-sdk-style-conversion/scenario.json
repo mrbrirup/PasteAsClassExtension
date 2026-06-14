@@ -1,0 +1,9 @@
+{
+  "scenarioId": "vssdk-sdk-style-conversion",
+  "operationId": "3e46fa2e-ad8d-45f4-85c1-0ae3a9ee9b2a",
+  "description": "Converts Visual Studio extension (VSIX/VSSDK) projects from legacy project format to SDK-style. Handles VSSDK-specific concerns including package references, VSIX manifest, VSCT command tables, project capabilities, and solution deploy markers for F5 debugging. Use when asked to \u0022convert VSIX to SDK style\u0022, \u0022modernize VS extension project\u0022, \u0022migrate VSSDK project\u0022, \u0022SDK-style VSIX\u0022, or \u0022update extension csproj format\u0022.\n",
+  "startTime": "2026-06-14T04:08:19.1906028Z",
+  "lastUpdateTime": "2026-06-14T04:08:19.2085999Z",
+  "properties": {},
+  "folderPath": ""
+}
